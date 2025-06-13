@@ -59,7 +59,16 @@ def return_form(
         dict[str, Any]: A JSON dictionary for the form response.
     """
     if isinstance(form_request, str):
-        form_request = json.loads(form_request)
+        if not form_request.strip():
+            # Handle empty string case
+            form_request = {}
+        else:
+            try:
+                form_request = json.loads(form_request)
+            except json.JSONDecodeError as e:
+                # Handle invalid JSON
+                print(f"Warning: Invalid JSON in form_request: {form_request!r}, error: {e}")
+                form_request = {}
 
     tool_context.actions.skip_summarization = True
     tool_context.actions.escalate = True
