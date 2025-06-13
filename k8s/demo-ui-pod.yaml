@@ -1,0 +1,67 @@
+---
+# Demo UI Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-ui
+  labels:
+    app: demo-ui
+spec:
+  containers:
+  - name: demo-ui
+    image: a2a-demo-ui:latest
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 12000
+      name: http
+      protocol: TCP
+    env:
+    - name: A2A_UI_HOST
+      value: "0.0.0.0"
+    - name: A2A_UI_PORT
+      value: "12000"
+    - name: GOOGLE_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: google-api-secret
+          key: api-key
+          optional: true
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    livenessProbe:
+      tcpSocket:
+        port: 12000
+      initialDelaySeconds: 60
+      periodSeconds: 60
+      timeoutSeconds: 5
+      failureThreshold: 5
+    readinessProbe:
+      tcpSocket:
+        port: 12000
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+---
+# Demo UI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-ui
+  labels:
+    app: demo-ui
+spec:
+  selector:
+    app: demo-ui
+  ports:
+  - port: 12000
+    targetPort: 12000
+    name: http
+    protocol: TCP
+  type: ClusterIP

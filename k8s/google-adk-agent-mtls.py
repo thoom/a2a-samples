@@ -1,5 +1,11 @@
+#!/usr/bin/env python3
+"""
+Modified Google ADK agent with mTLS support for Kubernetes deployment
+"""
+
 import logging
 import os
+import ssl
 
 import click
 
@@ -11,8 +17,8 @@ from a2a.types import (
     AgentCard,
     AgentSkill,
 )
-from .agent import ReimbursementAgent
-from .agent_executor import ReimbursementAgentExecutor
+from agent import ReimbursementAgent
+from agent_executor import ReimbursementAgentExecutor
 from dotenv import load_dotenv
 
 
@@ -24,14 +30,32 @@ logger = logging.getLogger(__name__)
 
 class MissingAPIKeyError(Exception):
     """Exception for missing API key."""
-
     pass
 
 
+def create_server_ssl_context():
+    """Create SSL context for server with client certificate verification"""
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    
+    # Server certificate and key from Kubernetes secret
+    cert_file = os.environ.get('TLS_CERT_FILE', '/etc/tls/google-adk-agent/tls.crt')
+    key_file = os.environ.get('TLS_KEY_FILE', '/etc/tls/google-adk-agent/tls.key')
+    ca_file = os.environ.get('TLS_CA_FILE', '/etc/tls/ca/ca.crt')
+    
+    context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+    
+    # CA certificate for client verification
+    context.load_verify_locations(ca_file)
+    context.verify_mode = ssl.CERT_REQUIRED
+    
+    return context
+
+
 @click.command()
-@click.option('--host', default='localhost')
+@click.option('--host', default='0.0.0.0')
 @click.option('--port', default=10002)
-def main(host, port):
+@click.option('--enable-mtls', default=False, is_flag=True, help='Enable mTLS authentication')
+def main(host, port, enable_mtls):
     try:
         # Check for API key only if Vertex AI is not configured
         if not os.getenv('GOOGLE_GENAI_USE_VERTEXAI') == 'TRUE':
@@ -50,29 +74,39 @@ def main(host, port):
                 'Can you reimburse me $20 for my lunch with the clients?'
             ],
         )
-        # Use HOST_OVERRIDE environment variable if set, otherwise use host:port
-        agent_host_url = os.getenv("HOST_OVERRIDE") if os.getenv("HOST_OVERRIDE") else f'http://{host}:{port}/'
         
+        # Update agent card URL based on mTLS setting
+        protocol = 'https' if enable_mtls else 'http'
         agent_card = AgentCard(
             name='Reimbursement Agent',
             description='This agent handles the reimbursement process for the employees given the amount and purpose of the reimbursement.',
-            url=agent_host_url,
+            url=f'{protocol}://{host}:{port}/',
             version='1.0.0',
             defaultInputModes=ReimbursementAgent.SUPPORTED_CONTENT_TYPES,
             defaultOutputModes=ReimbursementAgent.SUPPORTED_CONTENT_TYPES,
             capabilities=capabilities,
             skills=[skill],
         )
+        
         request_handler = DefaultRequestHandler(
             agent_executor=ReimbursementAgentExecutor(),
             task_store=InMemoryTaskStore(),
         )
+        
         server = A2AStarletteApplication(
             agent_card=agent_card, http_handler=request_handler
         )
+        
         import uvicorn
 
-        uvicorn.run(server.build(), host=host, port=port)
+        if enable_mtls:
+            logger.info(f'Starting Google ADK Agent with mTLS on https://{host}:{port}')
+            ssl_context = create_server_ssl_context()
+            uvicorn.run(server.build(), host=host, port=port, ssl_context=ssl_context)
+        else:
+            logger.info(f'Starting Google ADK Agent on http://{host}:{port}')
+            uvicorn.run(server.build(), host=host, port=port)
+            
     except MissingAPIKeyError as e:
         logger.error(f'Error: {e}')
         exit(1)

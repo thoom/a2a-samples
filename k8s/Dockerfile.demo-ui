@@ -1,0 +1,29 @@
+# Dockerfile for A2A Demo UI
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast Python package management
+RUN pip install uv
+
+# Copy only the necessary directories to maintain relative paths for uv.lock
+COPY samples/ ./samples/
+COPY demo/ ./demo/
+
+# Change to demo UI directory
+WORKDIR /app/demo/ui
+
+# Install Python dependencies using uv
+RUN uv sync --frozen
+
+# Expose port
+EXPOSE 12000
+
+# Run the application
+CMD ["uv", "run", "python", "main.py"]

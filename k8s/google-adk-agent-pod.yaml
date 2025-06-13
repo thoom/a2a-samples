@@ -1,0 +1,72 @@
+---
+# Google ADK Agent Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: google-adk-agent
+  labels:
+    app: google-adk-agent
+spec:
+  containers:
+  - name: google-adk-agent
+    image: a2a-google-adk-agent:latest
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 10002
+      name: http
+      protocol: TCP
+    env:
+    - name: GOOGLE_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: google-api-secret
+          key: api-key
+    - name: GOOGLE_GENAI_USE_VERTEXAI
+      value: "false"
+    - name: HOST_OVERRIDE
+      value: "http://google-adk-agent.default.svc.cluster.local:10002/"
+    command: 
+    - "uv"
+    - "run" 
+    - "python"
+    - "-m"
+    - "agents.google_adk"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "10002"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    livenessProbe:
+      tcpSocket:
+        port: 10002
+      initialDelaySeconds: 30
+      periodSeconds: 30
+    readinessProbe:
+      tcpSocket:
+        port: 10002
+      initialDelaySeconds: 5
+      periodSeconds: 10
+
+---
+# Google ADK Agent Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: google-adk-agent
+  labels:
+    app: google-adk-agent
+spec:
+  selector:
+    app: google-adk-agent
+  ports:
+  - port: 10002
+    targetPort: 10002
+    name: http
+    protocol: TCP
+  type: ClusterIP

@@ -1,0 +1,25 @@
+# Dockerfile for A2A Google ADK Agent
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast Python package management
+RUN pip install uv
+
+# Copy the Google ADK agent project files
+COPY samples/python/ ./
+
+# Install Python dependencies using uv
+RUN uv sync --frozen
+
+# Expose port
+EXPOSE 10002
+
+# Run the application
+CMD ["uv", "run", "python", "-m", "agents.google_adk", "--host", "0.0.0.0", "--port", "10002"]
